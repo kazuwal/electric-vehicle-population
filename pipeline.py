@@ -11,7 +11,7 @@ from pyspark.sql.types import (
     MapType,
 )
 import datetime
-import pyspark.sql.functions as func
+from pyspark.sql.functions import from_json, col, explode
 
 
 class Job:
@@ -30,7 +30,19 @@ class Job:
         if opts is None:
             opts = {}
 
-        pass
+        raw = self.spark.read.option("multiline", True).load("rows.json", format="json")
+
+        cols = raw.select("meta.view.columns").withColumn("columns", explode("columns"))
+
+        cols.select(
+            col("columns.id"),
+            col("columns.name"),
+            col("columns.dataTypeName"),
+            col("columns.fieldName"),
+            col("columns.position"),
+            col("columns.renderTypeName"),
+            col("columns.format"),
+        ).show()
 
 
 def main():
@@ -44,6 +56,7 @@ if __name__ == "__main__":
         [
             ("spark.master", "local[*]"),
             ("spark.app.name", "electric-vehicle-population"),
+            ("spark.sql.debug.maxToStringFields", 1000),
         ]
     )
     sc = SparkContext.getOrCreate(conf=conf)

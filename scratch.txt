@@ -1,0 +1,10 @@
+http://localhost:8081
+
+
+spark://172.18.0.2:7077
+
+
+spark-submit --master spark://172.18.0.2:7077 pipeline.py
+
+docker cp -L pipeline.py master:/opt/bitnami/spark/pipeline.py
+docker-compose exec master spark-submit --master spark://172.18.0.2:7077 pipeline.py
