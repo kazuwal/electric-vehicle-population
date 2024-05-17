@@ -11,7 +11,7 @@ from pyspark.sql.types import (
     MapType,
 )
 import datetime
-from pyspark.sql.functions import from_json, col, explode
+from pyspark.sql.functions import from_json, col, explode, explode_outer
 
 
 class Job:
@@ -32,17 +32,30 @@ class Job:
 
         raw = self.spark.read.option("multiline", True).load("rows.json", format="json")
 
-        cols = raw.select("meta.view.columns").withColumn("columns", explode("columns"))
+        df = raw.select("meta.view.columns")
 
-        cols.select(
+        df = df.withColumn("columns", explode("columns"))
+
+        df = df.select(
+            col("columns.computationStrategy.parameters.primary_key"),
+            col("columns.computationStrategy.parameters.region"),
+            col("columns.computationStrategy.source_columns").alias("source_columns"),
+            col("columns.dataTypeName").alias("data_type_name"),
+            col("columns.description"),
+            col("columns.fieldName").alias("field_name"),
+            col("columns.flags"),
+            col("columns.format.align"),
             col("columns.id"),
             col("columns.name"),
-            col("columns.dataTypeName"),
-            col("columns.fieldName"),
             col("columns.position"),
-            col("columns.renderTypeName"),
-            col("columns.format"),
-        ).show()
+            col("columns.renderTypeName").alias("render_type_name"),
+            col("columns.tableColumnId").alias("table_column_id"),
+        )
+
+        df = df.withColumn("source_columns", explode_outer("source_columns"))
+        df = df.withColumn("flags", explode_outer("flags"))
+
+        df.show()
 
 
 def main():
