@@ -39,7 +39,7 @@ class Job:
         df = df.select(
             col("columns.computationStrategy.parameters.primary_key"),
             col("columns.computationStrategy.parameters.region"),
-            col("columns.computationStrategy.source_columns").alias("source_columns"),
+            col("columns.computationStrategy.source_columns"),
             col("columns.dataTypeName").alias("data_type_name"),
             col("columns.description"),
             col("columns.fieldName").alias("field_name"),
