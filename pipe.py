@@ -119,35 +119,46 @@ class Job:
                     StructField("updated_at", StringType()),
                     StructField("updated_meta", StringType()),
                     StructField("meta", StringType()),
-                    StructField("VIN (1-10)", StringType()),
-                    StructField("County", StringType()),
-                    StructField("City", StringType()),
-                    StructField("State", StringType()),
-                    StructField("Postal Code", StringType()),
-                    StructField("Model Year", StringType()),
-                    StructField("Make", StringType()),
-                    StructField("Model", StringType()),
-                    StructField("Electric Vehicle Type", StringType()),
+                    StructField("vin", StringType()),
+                    StructField("county", StringType()),
+                    StructField("city", StringType()),
+                    StructField("state", StringType()),
+                    StructField("postal_code", StringType()),
+                    StructField("model_year", StringType()),
+                    StructField("make", StringType()),
+                    StructField("model", StringType()),
+                    StructField("electric_vehicle_type", StringType()),
                     StructField(
-                        "Clean Alternative Fuel Vehicle (CAFV) Eligibility",
+                        "clean_alternative_fuel_vehicle_eligibility",
                         StringType(),
                     ),
-                    StructField("Electric Range", StringType()),
-                    StructField("Base MSRP", StringType()),
-                    StructField("Legislative District", StringType()),
-                    StructField("DOL Vehicle ID", StringType()),
-                    StructField("Vehicle Location", StringType()),
-                    StructField("Electric Utility", StringType()),
-                    StructField("2020 Census Tract", StringType()),
-                    StructField("Counties", StringType()),
-                    StructField("Congressional Districts", StringType()),
-                    StructField(
-                        "WAOFM - GIS - Legislative District Boundary", StringType()
-                    ),
+                    StructField("electric_range", StringType()),
+                    StructField("base_msrp", StringType()),
+                    StructField("legislative_district", StringType()),
+                    StructField("dol_vehicle_id", StringType()),
+                    StructField("vehicle_location", StringType()),
+                    StructField("electric_utility", StringType()),
+                    StructField("2020_census_tract", StringType()),
+                    StructField("counties", StringType()),
+                    StructField("congressional_districts", StringType()),
+                    StructField("legislative_district_boundary", StringType()),
                 ]
             )
 
             rows = self.spark.createDataFrame(raw["data"], schema=rows_schema)
+
+            rows = rows.withColumn(
+                "electric_range", rows["electric_range"].cast(IntegerType())
+            )
+            rows = rows.withColumn("base_msrp", rows["base_msrp"].cast(IntegerType()))
+            rows = rows.withColumn(
+                "congressional_districts",
+                rows["congressional_districts"].cast(IntegerType()),
+            )
+            rows = rows.withColumn(
+                "legislative_district_boundary",
+                rows["legislative_district_boundary"].cast(IntegerType()),
+            )
 
             rows.show(5)
 
