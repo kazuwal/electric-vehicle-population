@@ -32,6 +32,7 @@ class Job:
             opts = {}
 
         with open("rows.json", "r") as f:
+
             raw = json.load(f)
 
             columns_schema = StructType(
@@ -108,7 +109,47 @@ class Job:
                 .withColumn("source_columns", explode_outer("source_columns"))
             )
 
-            columns.show()
+            rows_schema = StructType(
+                [
+                    StructField("sid", StringType()),
+                    StructField("id", StringType()),
+                    StructField("position", StringType()),
+                    StructField("created_at", StringType()),
+                    StructField("created_meta", StringType()),
+                    StructField("updated_at", StringType()),
+                    StructField("updated_meta", StringType()),
+                    StructField("meta", StringType()),
+                    StructField("VIN (1-10)", StringType()),
+                    StructField("County", StringType()),
+                    StructField("City", StringType()),
+                    StructField("State", StringType()),
+                    StructField("Postal Code", StringType()),
+                    StructField("Model Year", StringType()),
+                    StructField("Make", StringType()),
+                    StructField("Model", StringType()),
+                    StructField("Electric Vehicle Type", StringType()),
+                    StructField(
+                        "Clean Alternative Fuel Vehicle (CAFV) Eligibility",
+                        StringType(),
+                    ),
+                    StructField("Electric Range", StringType()),
+                    StructField("Base MSRP", StringType()),
+                    StructField("Legislative District", StringType()),
+                    StructField("DOL Vehicle ID", StringType()),
+                    StructField("Vehicle Location", StringType()),
+                    StructField("Electric Utility", StringType()),
+                    StructField("2020 Census Tract", StringType()),
+                    StructField("Counties", StringType()),
+                    StructField("Congressional Districts", StringType()),
+                    StructField(
+                        "WAOFM - GIS - Legislative District Boundary", StringType()
+                    ),
+                ]
+            )
+
+            rows = self.spark.createDataFrame(raw["data"], schema=rows_schema)
+
+            rows.show(5)
 
 
 def main():

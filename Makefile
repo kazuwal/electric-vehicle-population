@@ -1,5 +1,5 @@
 run_pipeline:
-	python pipeline.py
+	python pipe.py
 
 format_files:
 	black *.py
