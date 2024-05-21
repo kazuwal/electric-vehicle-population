@@ -12,6 +12,7 @@ from pyspark.sql.types import (
 )
 import datetime
 from pyspark.sql.functions import from_json, col, explode, explode_outer
+import json
 
 
 class Job:
@@ -30,32 +31,88 @@ class Job:
         if opts is None:
             opts = {}
 
-        raw = self.spark.read.option("multiline", True).load("rows.json", format="json")
+        with open("rows.json", "r") as f:
+            raw = json.load(f)
 
-        df = raw.select("meta.view.columns")
+            # raw = self.spark.read.option("multiline", True).load("rows.json", format="json")
 
-        df = df.withColumn("columns", explode("columns"))
+            columns_schema = StructType(
+                [
+                    StructField("id", StringType()),
+                    StructField("name", StringType()),
+                    StructField("dataTypeName", StringType()),
+                    StructField("description", StringType()),
+                    StructField("fieldName", StringType()),
+                    StructField("position", StringType()),
+                    StructField("flags", ArrayType(StringType())),
+                    StructField("renderTypeName", StringType()),
+                    StructField("tableColumnId", StringType()),
+                    StructField(
+                        "computationStrategy",
+                        StructType(
+                            [
+                                StructField("source_columns", ArrayType(StringType())),
+                                StructField("type", StringType()),
+                                StructField(
+                                    "parameters",
+                                    StructType(
+                                        [
+                                            StructField("region", StringType()),
+                                            StructField("primary_key", StringType()),
+                                        ]
+                                    ),
+                                ),
+                            ]
+                        ),
+                    ),
+                    StructField(
+                        "format", StructType([StructField("align", StringType())])
+                    ),
+                ]
+            )
 
-        df = df.select(
-            col("columns.computationStrategy.parameters.primary_key"),
-            col("columns.computationStrategy.parameters.region"),
-            col("columns.computationStrategy.source_columns"),
-            col("columns.dataTypeName").alias("data_type_name"),
-            col("columns.description"),
-            col("columns.fieldName").alias("field_name"),
-            col("columns.flags"),
-            col("columns.format.align"),
-            col("columns.id"),
-            col("columns.name"),
-            col("columns.position"),
-            col("columns.renderTypeName").alias("render_type_name"),
-            col("columns.tableColumnId").alias("table_column_id"),
-        )
+            columns = self.spark.createDataFrame(
+                raw["meta"]["view"]["columns"], schema=columns_schema
+            )
 
-        df = df.withColumn("source_columns", explode_outer("source_columns"))
-        df = df.withColumn("flags", explode_outer("flags"))
+            columns = columns.select(
+                col("id"),
+                col("name"),
+                col("dataTypeName"),
+                col("fieldName"),
+                col("position"),
+                col("flags"),
+                col("renderTypeName"),
+                col("tableColumnId"),
+                col("computationStrategy"),
+                col("description"),
+                col("format"),
+            )
 
-        df.show()
+            columns = (
+                columns.select(
+                    col("id"),
+                    col("name"),
+                    col("dataTypeName").alias("data_type_name"),
+                    col("fieldName").alias("field_name"),
+                    col("position"),
+                    col("flags"),
+                    col("renderTypeName").alias("render_type_name"),
+                    col("tableColumnId").alias("table_column_id"),
+                    col("computationStrategy.source_columns"),
+                    col("computationStrategy.type"),
+                    col("computationStrategy.parameters.region"),
+                    col("computationStrategy.parameters.primary_key"),
+                    col("description"),
+                    col("format.align"),
+                )
+                .withColumn("flags", explode_outer("flags"))
+                .withColumn("source_columns", explode_outer("source_columns"))
+            )
+
+            columns = columns.where("id == 583288609")
+
+            columns.show()
 
 
 def main():

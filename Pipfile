@@ -9,7 +9,5 @@ pyspark = "~=3.5.1"
 pytest = "~=8.2.0"
 black = "~=24.4.2"
 
-[dev - packages]
-
 [requires]
 python_version = "3.11"
