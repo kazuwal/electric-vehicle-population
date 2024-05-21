@@ -34,8 +34,6 @@ class Job:
         with open("rows.json", "r") as f:
             raw = json.load(f)
 
-            # raw = self.spark.read.option("multiline", True).load("rows.json", format="json")
-
             columns_schema = StructType(
                 [
                     StructField("id", StringType()),
@@ -109,8 +107,6 @@ class Job:
                 .withColumn("flags", explode_outer("flags"))
                 .withColumn("source_columns", explode_outer("source_columns"))
             )
-
-            columns = columns.where("id == 583288609")
 
             columns.show()
 
