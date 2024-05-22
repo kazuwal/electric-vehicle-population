@@ -31,7 +31,7 @@ class Job:
         if opts is None:
             opts = {}
 
-        with open("/opt/spark-app/rows.json", "r") as f:
+        with open("/opt/app/rows.json", "r") as f:
 
             raw = json.load(f)
 
