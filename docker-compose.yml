@@ -58,16 +58,16 @@ services:
       - .:/opt/app
 
   postgres:
-    image: 'postgres:14.1-alpine'
-    restart: 'always'
+    image: postgres:14.1-alpine
+    restart: always
     environment:
-      - 'POSTGRES_USER=postgres'
-      - 'POSTGRES_PASSWORD=postgres'
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     volumes:
-      - 'postgresdata:/var/lib/postgresql/data'
-      - './0.sql:/docker-entrypoint-initdb.d/0.sql'
+      - postgresdata:/var/lib/postgresql/data
+      - ./0.sql:/docker-entrypoint-initdb.d/0.sql
     ports:
-      - '5432:5432'
+      - "5432:5432"
 
 volumes:
   postgresdata:
