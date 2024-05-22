@@ -160,7 +160,15 @@ class Job:
                 rows["legislative_district_boundary"].cast(IntegerType()),
             )
 
-            rows.show(5)
+            dim_city = rows.select(col("city")).dropDuplicates()
+
+            dim_city.show()
+
+            dim_city.write.option("path", "file:/opt/bitnami/spark/spark-warehouse/dim_city").mode("overwrite").saveAsTable("dim_city")
+
+            self.spark.sql("select * from spark_catalog.default.dim_city").show()
+
+
 
 
 def main():
@@ -172,7 +180,7 @@ if __name__ == "__main__":
     conf = SparkConf()
     conf.setAll(
         [
-            ("spark.master", "local[*]"),
+            # ("spark.master", "local[*]"),
             ("spark.app.name", "electric-vehicle-population"),
             ("spark.sql.debug.maxToStringFields", 1000),
         ]
