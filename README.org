@@ -3,3 +3,11 @@
 ** Electric vehicle population data project
 
 https://catalog.data.gov/dataset/electric-vehicle-population-data
+
+* Local UI
+
+http://localhost:8081
+
+* Running Job Against Local Cluster
+
+docker exec -it spark-master /opt/bitnami/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark-app/example.py
