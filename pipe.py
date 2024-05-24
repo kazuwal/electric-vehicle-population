@@ -180,7 +180,6 @@ if __name__ == "__main__":
     conf = SparkConf()
     conf.setAll(
         [
-            # ("spark.master", "local[*]"),
             ("spark.app.name", "electric-vehicle-population"),
             ("spark.sql.debug.maxToStringFields", 1000),
         ]
