@@ -161,19 +161,21 @@ class Job:
             rows["legislative_district_boundary"].cast(IntegerType()),
         )
 
-        dim_address = rows.select(col("county"), col("city"), col("state"), col("postal_code")).dropDuplicates()
+        dim_address = rows.select(
+            col("county"), col("city"), col("state"), col("postal_code")
+        ).dropDuplicates()
 
-        dim_address.write.option(
-            "path", f"{warehouse}/dim_address"
-        ).mode("overwrite").saveAsTable("dim_address")
+        dim_address.write.option("path", f"{warehouse}/dim_address").mode(
+            "overwrite"
+        ).saveAsTable("dim_address")
 
         self.spark.sql("select * from dim_address").show(3)
 
         dim_car = rows.select(col("make"), col("model")).dropDuplicates()
 
-        dim_car.write.option(
-            "path", f"{warehouse}/dim_car"
-        ).mode("overwrite").saveAsTable("dim_car")
+        dim_car.write.option("path", f"{warehouse}/dim_car").mode(
+            "overwrite"
+        ).saveAsTable("dim_car")
 
         self.spark.sql("select * from dim_car").show(3)
 
