@@ -32,6 +32,7 @@ class Job:
             opts = {}
 
         home = "/opt/app"
+        warehouse = "file:/opt/bitnami/spark/spark-warehouse"
 
         f = open(f"{home}/rows.json", "r")
 
@@ -160,27 +161,37 @@ class Job:
             rows["legislative_district_boundary"].cast(IntegerType()),
         )
 
-        dim_city = rows.select(col("city")).dropDuplicates()
+        dim_address = rows.select(col("county"), col("city"), col("state"), col("postal_code")).dropDuplicates()
 
-        dim_city.write.option(
-            "path", "file:/opt/bitnami/spark/spark-warehouse/dim_city"
-        ).mode("overwrite").saveAsTable("dim_city")
+        dim_address.write.option(
+            "path", f"{warehouse}/dim_address"
+        ).mode("overwrite").saveAsTable("dim_address")
 
-        cols = [
-            StructField("make", StringType()),
-            StructField("model", StringType()),
-            StructField("logo", StringType()),
-            StructField("date", StringType()),
-            StructField("sales", DoubleType()),
-        ]
+        self.spark.sql("select * from dim_address").show(3)
 
-        schema = StructType(cols)
+        dim_car = rows.select(col("make"), col("model")).dropDuplicates()
 
-        sales = self.spark.read.load(
-            f"{home}/sales.csv", format="csv", header=True, sep=",", schema=schema
-        )
+        dim_car.write.option(
+            "path", f"{warehouse}/dim_car"
+        ).mode("overwrite").saveAsTable("dim_car")
 
-        sales.show()
+        self.spark.sql("select * from dim_car").show(3)
+
+        # cols = [
+        #     StructField("make", StringType()),
+        #     StructField("model", StringType()),
+        #     StructField("logo", StringType()),
+        #     StructField("date", StringType()),
+        #     StructField("sales", DoubleType()),
+        # ]
+
+        # schema = StructType(cols)
+
+        # sales = self.spark.read.load(
+        #     f"{home}/sales.csv", format="csv", header=True, sep=",", schema=schema
+        # )
+
+        # sales.show()
 
 
 def main():
