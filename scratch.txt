@@ -119,3 +119,18 @@ sales.selectExpr("Make", "Model", "Logo", "stack(2, 'Jan 2012', `janv-12`, 'Feb 
 "Dec 2019
 
 docker-compose down -v
+
+
+dim_address = rows.select(
+    col("county"), col("city"), col("state"), col("postal_code")
+).dropDuplicates()
+
+dim_address.write.option("path", f"{warehouse}/dim_address").mode(
+    "overwrite"
+).saveAsTable("dim_address")
+
+dim_car = rows.select(col("make"), col("model")).dropDuplicates()
+
+dim_car.write.option("path", f"{warehouse}/dim_car").mode(
+    "overwrite"
+).saveAsTable("dim_car")

@@ -34,7 +34,7 @@ class Job:
         home = "/opt/app"
         warehouse = "file:/opt/bitnami/spark/spark-warehouse"
 
-        f = open(f"{home}/rows.json", "r")
+        f = open(f"{home}/ev_registration.json", "r")
 
         raw = json.load(f)
 
@@ -110,7 +110,7 @@ class Job:
             .withColumn("source_columns", explode_outer("source_columns"))
         )
 
-        rows_schema = StructType(
+        ev_registration_schema = StructType(
             [
                 StructField("sid", StringType()),
                 StructField("id", StringType()),
@@ -146,54 +146,55 @@ class Job:
             ]
         )
 
-        rows = self.spark.createDataFrame(raw["data"], schema=rows_schema)
-
-        rows = rows.withColumn(
-            "electric_range", rows["electric_range"].cast(IntegerType())
+        ev_registration = self.spark.createDataFrame(
+            raw["data"], schema=ev_registration_schema
         )
-        rows = rows.withColumn("base_msrp", rows["base_msrp"].cast(IntegerType()))
-        rows = rows.withColumn(
+
+        ev_registration = ev_registration.withColumn(
+            "electric_range", ev_registration["electric_range"].cast(IntegerType())
+        )
+        ev_registration = ev_registration.withColumn(
+            "base_msrp", ev_registration["base_msrp"].cast(IntegerType())
+        )
+        ev_registration = ev_registration.withColumn(
             "congressional_districts",
-            rows["congressional_districts"].cast(IntegerType()),
+            ev_registration["congressional_districts"].cast(IntegerType()),
         )
-        rows = rows.withColumn(
+        ev_registration = ev_registration.withColumn(
             "legislative_district_boundary",
-            rows["legislative_district_boundary"].cast(IntegerType()),
+            ev_registration["legislative_district_boundary"].cast(IntegerType()),
         )
 
-        dim_address = rows.select(
-            col("county"), col("city"), col("state"), col("postal_code")
-        ).dropDuplicates()
-
-        dim_address.write.option("path", f"{warehouse}/dim_address").mode(
+        # create the ev reg staging table
+        ev_registration.write.option("path", f"{warehouse}/stg_ev_registration").mode(
             "overwrite"
-        ).saveAsTable("dim_address")
+        ).saveAsTable("stg_ev_registration")
 
-        self.spark.sql("select * from dim_address").show(3)
+        self.spark.sql("select * from stg_ev_registration").show(3)
 
-        dim_car = rows.select(col("make"), col("model")).dropDuplicates()
+        ev_sales_schema = StructType(
+            [
+                StructField("make", StringType()),
+                StructField("model", StringType()),
+                StructField("logo", StringType()),
+                StructField("date", StringType()),
+                StructField("sales", DoubleType()),
+            ]
+        )
 
-        dim_car.write.option("path", f"{warehouse}/dim_car").mode(
+        ev_sales = self.spark.read.load(
+            f"{home}/ev_sales.csv",
+            format="csv",
+            header=True,
+            sep=",",
+            schema=ev_sales_schema,
+        )
+
+        ev_sales.write.option("path", f"{warehouse}/stg_ev_sales").mode(
             "overwrite"
-        ).saveAsTable("dim_car")
+        ).saveAsTable("stg_ev_sales")
 
-        self.spark.sql("select * from dim_car").show(3)
-
-        # cols = [
-        #     StructField("make", StringType()),
-        #     StructField("model", StringType()),
-        #     StructField("logo", StringType()),
-        #     StructField("date", StringType()),
-        #     StructField("sales", DoubleType()),
-        # ]
-
-        # schema = StructType(cols)
-
-        # sales = self.spark.read.load(
-        #     f"{home}/sales.csv", format="csv", header=True, sep=",", schema=schema
-        # )
-
-        # sales.show()
+        self.spark.sql("select * from stg_ev_sales").show(3)
 
 
 def main():
