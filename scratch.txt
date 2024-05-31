@@ -118,3 +118,4 @@ sales.selectExpr("Make", "Model", "Logo", "stack(2, 'Jan 2012', `janv-12`, 'Feb 
 "nov-19,
 "Dec 2019
 
+docker-compose down -v
