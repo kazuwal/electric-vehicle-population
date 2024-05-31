@@ -186,8 +186,7 @@ class Job:
             "overwrite"
         ).saveAsTable("stg_ev_registration")
 
-        start_date = "2020-01-01"
-        end_date = "2023-12-31"
+        start_date, end_date = "2020-01-01", "2023-12-31"
 
         df_date = spark.sql(
             f"select sequence(to_date('{start_date}'), to_date('{end_date}'), interval 1 day) as seq"
