@@ -172,6 +172,26 @@ class Job:
 
         self.spark.sql("select * from stg_ev_registration").show(3)
 
+        dim_address = self.spark.sql(
+            """
+            select distinct er.county,
+                   er.city,
+                   er.state,
+                   er.postal_code
+            from stg_ev_registration er
+        """
+        )
+
+        dim_car = self.spark.sql(
+            """
+                select distinct er.make,
+                       er.model
+                from stg_ev_registration er
+            """
+        )
+
+        dim_car.show(5)
+
         ev_sales_schema = StructType(
             [
                 StructField("make", StringType()),
