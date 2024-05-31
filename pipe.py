@@ -1,5 +1,8 @@
 from pyspark.sql import SparkSession
 from pyspark import SparkContext, SparkConf
+import datetime
+import json
+
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -10,9 +13,22 @@ from pyspark.sql.types import (
     ArrayType,
     MapType,
 )
-import datetime
-from pyspark.sql.functions import from_json, col, explode, explode_outer, stack, lit
-import json
+from pyspark.sql.functions import (
+    from_json,
+    col,
+    explode,
+    explode_outer,
+    stack,
+    lit,
+    date_format,
+    dayofmonth,
+    dayofweek,
+    dayofyear,
+    month,
+    quarter,
+    weekofyear,
+    year,
+)
 
 
 class Job:
@@ -170,7 +186,28 @@ class Job:
             "overwrite"
         ).saveAsTable("stg_ev_registration")
 
-        self.spark.sql("select * from stg_ev_registration").show(3)
+        start_date = "2020-01-01"
+        end_date = "2023-12-31"
+
+        df_date = spark.sql(
+            f"select sequence(to_date('{start_date}'), to_date('{end_date}'), interval 1 day) as seq"
+        )
+
+        df_date = df_date.selectExpr("explode(seq) as date")
+
+        dim_date = (
+            df_date.withColumn("year", year(col("date")))
+            .withColumn("quarter", quarter(col("date")))
+            .withColumn("month", month(col("date")))
+            .withColumn("day", dayofmonth(col("date")))
+            .withColumn("day_of_week", dayofweek(col("date")))
+            .withColumn("week_of_year", weekofyear(col("date")))
+            .withColumn("day_of_year", dayofyear(col("date")))
+            .withColumn("is_weekend", (col("day_of_week").isin([1, 7])).cast("boolean"))
+            .withColumn("date_str", date_format(col("date"), "yyyy-MM-dd"))
+        )
+
+        dim_date.show(5)
 
         dim_address = self.spark.sql(
             """
@@ -189,8 +226,6 @@ class Job:
                 from stg_ev_registration er
             """
         )
-
-        dim_car.show(5)
 
         ev_sales_schema = StructType(
             [
@@ -213,8 +248,6 @@ class Job:
         ev_sales.write.option("path", f"{warehouse}/stg_ev_sales").mode(
             "overwrite"
         ).saveAsTable("stg_ev_sales")
-
-        self.spark.sql("select * from stg_ev_sales").show(3)
 
 
 def main():

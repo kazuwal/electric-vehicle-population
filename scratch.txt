@@ -134,3 +134,13 @@ dim_car = rows.select(col("make"), col("model")).dropDuplicates()
 dim_car.write.option("path", f"{warehouse}/dim_car").mode(
     "overwrite"
 ).saveAsTable("dim_car")
+
+is_dim = (
+            dim_address.groupBy("county", "city", "state", "postal_code")
+            .count()
+            .where("count > 1")
+            .count()
+            == 0
+        )
+
+assert is_dim is True
