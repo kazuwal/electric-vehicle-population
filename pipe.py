@@ -206,25 +206,38 @@ class Job:
             .withColumn("date_str", date_format(col("date"), "yyyy-MM-dd"))
         )
 
-        dim_date.show(5)
-
-        dim_address = self.spark.sql(
+        dim_location = self.spark.sql(
             """
             select distinct er.county,
                    er.city,
                    er.state,
-                   er.postal_code
+                   er.postal_code,
+                   er.counties,
+                   er.congressional_districts,
+                   er.legislative_district,
+                   er.vehicle_location
             from stg_ev_registration er
         """
         )
 
+        dim_location.show(5)
+
         dim_car = self.spark.sql(
             """
                 select distinct er.make,
-                       er.model
+                       er.model,
+                       er.model_year,
+                       er.electric_vehicle_type,
+                       er.clean_alternative_fuel_vehicle_eligibility,
+                       er.electric_range,
+                       er.base_msrp,
+                       er.vin,
+                       er.dol_vehicle_id
                 from stg_ev_registration er
             """
         )
+
+        dim_car.show(5)
 
         ev_sales_schema = StructType(
             [
