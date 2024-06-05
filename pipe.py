@@ -28,6 +28,7 @@ from pyspark.sql.functions import (
     quarter,
     weekofyear,
     year,
+    split,
 )
 
 
@@ -181,6 +182,20 @@ class Job:
             ev_registration["legislative_district_boundary"].cast(IntegerType()),
         )
 
+        ev_registration = ev_registration.withColumn(
+            "electric_utilities", split(ev_registration["electric_utility"], r"\|\|?")
+        )
+
+        ev_registration = (
+            ev_registration.withColumn(
+                "electric_utility_0", ev_registration["electric_utilities"].getItem(0)
+            )
+            .withColumn(
+                "electric_utility_1", ev_registration["electric_utilities"].getItem(1)
+            )
+            .drop("electric_utilities")
+        )
+
         # create the ev reg staging table
         ev_registration.write.option("path", f"{warehouse}/stg_ev_registration").mode(
             "overwrite"
@@ -192,7 +207,7 @@ class Job:
             f"select sequence(to_date('{start_date}'), to_date('{end_date}'), interval 1 day) as seq"
         )
 
-        df_date = df_date.selectExpr("explode(seq) as date")
+        df_date = df_date.select(explode(col("seq")).alias("date"))
 
         dim_date = (
             df_date.withColumn("year", year(col("date")))
