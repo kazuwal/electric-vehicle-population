@@ -169,7 +169,7 @@ class Job:
             raw["data"], schema=stg_ev_registration_schema
         )
 
-        self.spark.sql("create database if not exists stg")
+        self.spark.sql("create schema if not exists stg")
 
         self.spark.sql("use stg")
 
@@ -215,7 +215,7 @@ class Job:
         """
         )
 
-        self.spark.sql("create database if not exists int")
+        self.spark.sql("create schema if not exists int")
 
         self.spark.sql("use int")
 
