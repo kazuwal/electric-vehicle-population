@@ -173,7 +173,7 @@ class Job:
 
         self.spark.sql("use stg")
 
-        stg_ev_registration.write.option("path", f"{warehouse}.stg").mode(
+        stg_ev_registration.write.option("path", f"{warehouse}/stg").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
 
@@ -219,7 +219,7 @@ class Job:
 
         self.spark.sql("use int")
 
-        int_ev_registration.write.option("path", f"{warehouse}.int").mode(
+        int_ev_registration.write.option("path", f"{warehouse}/int").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
 
