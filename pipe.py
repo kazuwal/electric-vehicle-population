@@ -29,6 +29,8 @@ from pyspark.sql.functions import (
     weekofyear,
     year,
     split,
+    expr,
+    when,
 )
 
 
@@ -127,7 +129,7 @@ class Job:
             .withColumn("source_columns", explode_outer("source_columns"))
         )
 
-        ev_registration_schema = StructType(
+        stg_ev_registration_schema = StructType(
             [
                 StructField("sid", StringType()),
                 StructField("id", StringType()),
@@ -163,45 +165,67 @@ class Job:
             ]
         )
 
-        ev_registration = self.spark.createDataFrame(
-            raw["data"], schema=ev_registration_schema
+        stg_ev_registration = self.spark.createDataFrame(
+            raw["data"], schema=stg_ev_registration_schema
         )
 
-        ev_registration = ev_registration.withColumn(
-            "electric_range", ev_registration["electric_range"].cast(IntegerType())
-        )
-        ev_registration = ev_registration.withColumn(
-            "base_msrp", ev_registration["base_msrp"].cast(IntegerType())
-        )
-        ev_registration = ev_registration.withColumn(
-            "congressional_districts",
-            ev_registration["congressional_districts"].cast(IntegerType()),
-        )
-        ev_registration = ev_registration.withColumn(
-            "legislative_district_boundary",
-            ev_registration["legislative_district_boundary"].cast(IntegerType()),
-        )
+        self.spark.sql("create database if not exists stg")
 
-        ev_registration = ev_registration.withColumn(
-            "electric_utilities", split(ev_registration["electric_utility"], r"\|\|?")
-        )
+        self.spark.sql("use stg")
 
-        ev_registration = (
-            ev_registration.withColumn(
-                "electric_utility_0", ev_registration["electric_utilities"].getItem(0)
-            )
-            .withColumn(
-                "electric_utility_1", ev_registration["electric_utilities"].getItem(1)
-            )
-            .drop("electric_utilities")
-        )
-
-        # create the ev reg staging table
-        ev_registration.write.option("path", f"{warehouse}/stg_ev_registration").mode(
+        stg_ev_registration.write.option("path", f"{warehouse}.stg").mode(
             "overwrite"
-        ).saveAsTable("stg_ev_registration")
+        ).saveAsTable("ev_registration")
 
-        start_date, end_date = "2020-01-01", "2023-12-31"
+        self.spark.sql("select * from stg.ev_registration").show(5)
+
+        int_ev_registration = self.spark.sql(
+            """
+            select
+            sid,
+            id,
+            position,
+            created_at,
+            created_meta,
+            updated_at,
+            updated_meta,
+            meta,
+            vin,
+            county,
+            city,
+            state,
+            postal_code,
+            model_year,
+            make,
+            model,
+            electric_vehicle_type,
+            clean_alternative_fuel_vehicle_eligibility,
+            cast(electric_range as int),
+            cast(base_msrp as int),
+            legislative_district,
+            dol_vehicle_id,
+            vehicle_location,
+            split(electric_utility, '\\\|\\\|?')[0] as electric_utility_0,
+            split(electric_utility, '\\\|\\\|?')[1] as electric_utility_1,
+            2020_census_tract,
+            counties,
+            cast(congressional_districts as int),
+            cast(legislative_district_boundary as int)
+            from stg.ev_registration
+        """
+        )
+
+        self.spark.sql("create database if not exists int")
+
+        self.spark.sql("use int")
+
+        int_ev_registration.write.option("path", f"{warehouse}.int").mode(
+            "overwrite"
+        ).saveAsTable("ev_registration")
+
+        self.spark.sql("select * from int.ev_registration").show(5)
+
+        start_date, end_date = "2020-01-01", "2030-01-01"
 
         df_date = spark.sql(
             f"select sequence(to_date('{start_date}'), to_date('{end_date}'), interval 1 day) as seq"
@@ -209,17 +233,131 @@ class Job:
 
         df_date = df_date.select(explode(col("seq")).alias("date"))
 
-        dim_date = (
-            df_date.withColumn("year", year(col("date")))
-            .withColumn("quarter", quarter(col("date")))
-            .withColumn("month", month(col("date")))
-            .withColumn("day", dayofmonth(col("date")))
-            .withColumn("day_of_week", dayofweek(col("date")))
-            .withColumn("week_of_year", weekofyear(col("date")))
-            .withColumn("day_of_year", dayofyear(col("date")))
-            .withColumn("is_weekend", (col("day_of_week").isin([1, 7])).cast("boolean"))
-            .withColumn("date_str", date_format(col("date"), "yyyy-MM-dd"))
+        dim_day = (
+            df_date.withColumn(
+                "DateKey", date_format(col("date"), "yyyyMMdd").cast("int")
+            )
+            .withColumn("FullDate", col("date"))
+            .withColumn("DayOfMonth", dayofmonth(col("date")))
+            .withColumn(
+                "DaySuffix",
+                when(col("DayOfMonth").isin(1, 21, 31), lit("st"))
+                .when(col("DayOfMonth").isin(2, 22), lit("nd"))
+                .when(col("DayOfMonth").isin(3, 23), lit("rd"))
+                .otherwise(lit("th")),
+            )
+            .withColumn("DayName", date_format(col("date"), "EEEE"))
+            .withColumn("DayOfWeek", dayofweek(col("date")))
+            .withColumn(
+                "IsWeekend",
+                when(dayofweek(col("date")).isin(1, 7), lit(1)).otherwise(lit(0)),
+            )
+            .withColumn("WeekOfYear", weekofyear(col("date")))
+            .withColumn("Month", month(col("date")))
+            .withColumn("MonthName", date_format(col("date"), "MMMM"))
+            .withColumn("Quarter", quarter(col("date")))
+            .withColumn("Year", year(col("date")))
+            .withColumn("DayOfYear", dayofyear(col("date")))
+            .withColumn("WeekOfMonth", expr("ceil(dayofmonth(date) / 7)"))
+            .withColumn(
+                "FirstDayOfMonth", expr("date_sub(date_add(date, 1-day(date)), 0)")
+            )
+            .withColumn(
+                "LastDayOfMonth",
+                expr("date_sub(date_add(date, 1-day(add_months(date, 1))), 1)"),
+            )
+            .withColumn(
+                "FirstDayOfQuarter",
+                expr(
+                    "case when month(date) in (1,2,3) then date_sub(date_add(date, 1-day(date)), 0) "
+                    + "when month(date) in (4,5,6) then date_sub(date_add(date, 1-day(date) + 90 - mod(dayofyear(date), 90)), 0) "
+                    + "when month(date) in (7,8,9) then date_sub(date_add(date, 1-day(date) + 181 - mod(dayofyear(date), 91)), 0) "
+                    + "else date_sub(date_add(date, 1-day(date) + 273 - mod(dayofyear(date), 92)), 0) end"
+                ),
+            )
+            .withColumn(
+                "LastDayOfQuarter",
+                expr(
+                    "case when month(date) in (1,2,3) then date_sub(date_add(date, 1-day(add_months(date, 3))), 1) "
+                    + "when month(date) in (4,5,6) then date_sub(date_add(date, 1-day(add_months(date, 6))), 1) "
+                    + "when month(date) in (7,8,9) then date_sub(date_add(date, 1-day(add_months(date, 9))), 1) "
+                    + "else date_sub(date_add(date, 1-day(add_months(date, 12))), 1) end"
+                ),
+            )
+            .withColumn(
+                "IsLeapYear",
+                when(
+                    expr(
+                        "mod(year(date), 4) == 0 and (mod(year(date), 100) != 0 or mod(year(date), 400) == 0)"
+                    ),
+                    lit(1),
+                ).otherwise(lit(0)),
+            )
+            .withColumn(
+                "Season",
+                when(col("Month").isin(12, 1, 2), lit("Winter"))
+                .when(col("Month").isin(3, 4, 5), lit("Spring"))
+                .when(col("Month").isin(6, 7, 8), lit("Summer"))
+                .otherwise(lit("Fall")),
+            )
         )
+
+        fiscal_year_start_month = 4  # For example, fiscal year starts in April
+
+        dim_day = (
+            dim_day.withColumn(
+                "FiscalYear",
+                when(
+                    month(col("date")) >= fiscal_year_start_month, year(col("date")) + 1
+                ).otherwise(year(col("date"))),
+            )
+            .withColumn(
+                "FiscalQuarter",
+                expr(
+                    f"ceil((month(date) - {fiscal_year_start_month} + 12) % 12 / 3) + 1"
+                ),
+            )
+            .withColumn(
+                "FiscalMonth",
+                expr(f"(month(date) - {fiscal_year_start_month} + 12) % 12 + 1"),
+            )
+            .withColumn(
+                "FirstDayOfFiscalYear",
+                expr(
+                    f"case when month(date) >= {fiscal_year_start_month} then to_date(concat(year(date) + 1, '-{fiscal_year_start_month}-01'))"
+                    + f"else to_date(concat(year(date), '-{fiscal_year_start_month}-01')) end"
+                ),
+            )
+            .withColumn(
+                "LastDayOfFiscalYear",
+                expr(
+                    f"date_sub(add_months(to_date(concat(FiscalYear, '-{fiscal_year_start_month}-01')), 12), 1)"
+                ),
+            )
+            .withColumn(
+                "FirstDayOfFiscalQuarter",
+                expr(
+                    f"case when month(date) in ({fiscal_year_start_month},{fiscal_year_start_month+1},{fiscal_year_start_month+2}) then to_date(concat(year(date), '-{fiscal_year_start_month}-01'))"
+                    + f"when month(date) in ({fiscal_year_start_month+3},{fiscal_year_start_month+4},{fiscal_year_start_month+5}) then to_date(concat(year(date), '-{fiscal_year_start_month+3}-01'))"
+                    + f"when month(date) in ({fiscal_year_start_month+6},{fiscal_year_start_month+7},{fiscal_year_start_month+8}) then to_date(concat(year(date), '-{fiscal_year_start_month+6}-01'))"
+                    + f"else to_date(concat(year(date), '-{fiscal_year_start_month+9}-01')) end"
+                ),
+            )
+            .withColumn(
+                "LastDayOfFiscalQuarter",
+                expr("date_sub(add_months(FirstDayOfFiscalQuarter, 3), 1)"),
+            )
+        )
+
+        dim_day.cache()
+
+        dim_week = dim_day.where(col("DayOfWeek").isin(1))
+
+        dim_month = dim_day.where(col("DayOfMonth").isin(1))
+
+        dim_day = dim_day.where(~col("DayOfWeek").isin(1))
+
+        dim_day = dim_day.where(~col("DayOfMonth").isin(1))
 
         dim_location = self.spark.sql(
             """
@@ -231,11 +369,9 @@ class Job:
                    er.congressional_districts,
                    er.legislative_district,
                    er.vehicle_location
-            from stg_ev_registration er
+            from int.ev_registration er
         """
         )
-
-        dim_location.show(5)
 
         dim_car = self.spark.sql(
             """
@@ -248,11 +384,9 @@ class Job:
                        er.base_msrp,
                        er.vin,
                        er.dol_vehicle_id
-                from stg_ev_registration er
+                from int.ev_registration er
             """
         )
-
-        dim_car.show(5)
 
         ev_sales_schema = StructType(
             [
@@ -260,7 +394,7 @@ class Job:
                 StructField("model", StringType()),
                 StructField("logo", StringType()),
                 StructField("date", StringType()),
-                StructField("sales", DoubleType()),
+                StructField("sales", StringType()),
             ]
         )
 
@@ -271,10 +405,6 @@ class Job:
             sep=",",
             schema=ev_sales_schema,
         )
-
-        ev_sales.write.option("path", f"{warehouse}/stg_ev_sales").mode(
-            "overwrite"
-        ).saveAsTable("stg_ev_sales")
 
 
 def main():
