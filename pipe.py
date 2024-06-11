@@ -435,10 +435,6 @@ class Job:
         """
         )
 
-        int_day.show(5)
-        int_week.show(5)
-        int_month.show(5)
-
         stg_ev_registration.write.option("path", f"{staging}/ev_registration").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
