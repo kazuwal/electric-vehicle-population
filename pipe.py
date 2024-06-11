@@ -53,6 +53,151 @@ class Job:
         home = "/opt/app"
         warehouse = "file:/opt/bitnami/spark/spark-warehouse"
 
+        """
+            create schemas
+        """
+
+        self.spark.sql("create schema if not exists stg")
+        self.spark.sql("create schema if not exists int")
+
+        """
+            create date dimension tables
+        """
+
+        start_date, end_date = "2020-01-01", "2030-01-01"
+
+        df_date = spark.sql(
+            f"select sequence(to_date('{start_date}'), to_date('{end_date}'), interval 1 day) as seq"
+        )
+
+        stg_date = df_date.select(explode(col("seq")).alias("date"))
+
+        stg_day = (
+            stg_date.withColumn(
+                "DateKey", date_format(col("date"), "yyyyMMdd").cast("int")
+            )
+            .withColumn("FullDate", col("date"))
+            .withColumn("DayOfMonth", dayofmonth(col("date")))
+            .withColumn(
+                "DaySuffix",
+                when(col("DayOfMonth").isin(1, 21, 31), lit("st"))
+                .when(col("DayOfMonth").isin(2, 22), lit("nd"))
+                .when(col("DayOfMonth").isin(3, 23), lit("rd"))
+                .otherwise(lit("th")),
+            )
+            .withColumn("DayName", date_format(col("date"), "EEEE"))
+            .withColumn("DayOfWeek", dayofweek(col("date")))
+            .withColumn(
+                "IsWeekend",
+                when(dayofweek(col("date")).isin(1, 7), lit(1)).otherwise(lit(0)),
+            )
+            .withColumn("WeekOfYear", weekofyear(col("date")))
+            .withColumn("Month", month(col("date")))
+            .withColumn("MonthName", date_format(col("date"), "MMMM"))
+            .withColumn("Quarter", quarter(col("date")))
+            .withColumn("Year", year(col("date")))
+            .withColumn("DayOfYear", dayofyear(col("date")))
+            .withColumn("WeekOfMonth", expr("ceil(dayofmonth(date) / 7)"))
+            .withColumn(
+                "FirstDayOfMonth", expr("date_sub(date_add(date, 1-day(date)), 0)")
+            )
+            .withColumn(
+                "LastDayOfMonth",
+                expr("date_sub(date_add(date, 1-day(add_months(date, 1))), 1)"),
+            )
+            .withColumn(
+                "FirstDayOfQuarter",
+                expr(
+                    "case when month(date) in (1,2,3) then date_sub(date_add(date, 1-day(date)), 0) "
+                    + "when month(date) in (4,5,6) then date_sub(date_add(date, 1-day(date) + 90 - mod(dayofyear(date), 90)), 0) "
+                    + "when month(date) in (7,8,9) then date_sub(date_add(date, 1-day(date) + 181 - mod(dayofyear(date), 91)), 0) "
+                    + "else date_sub(date_add(date, 1-day(date) + 273 - mod(dayofyear(date), 92)), 0) end"
+                ),
+            )
+            .withColumn(
+                "LastDayOfQuarter",
+                expr(
+                    "case when month(date) in (1,2,3) then date_sub(date_add(date, 1-day(add_months(date, 3))), 1) "
+                    + "when month(date) in (4,5,6) then date_sub(date_add(date, 1-day(add_months(date, 6))), 1) "
+                    + "when month(date) in (7,8,9) then date_sub(date_add(date, 1-day(add_months(date, 9))), 1) "
+                    + "else date_sub(date_add(date, 1-day(add_months(date, 12))), 1) end"
+                ),
+            )
+            .withColumn(
+                "IsLeapYear",
+                when(
+                    expr(
+                        "mod(year(date), 4) == 0 and (mod(year(date), 100) != 0 or mod(year(date), 400) == 0)"
+                    ),
+                    lit(1),
+                ).otherwise(lit(0)),
+            )
+            .withColumn(
+                "Season",
+                when(col("Month").isin(12, 1, 2), lit("Winter"))
+                .when(col("Month").isin(3, 4, 5), lit("Spring"))
+                .when(col("Month").isin(6, 7, 8), lit("Summer"))
+                .otherwise(lit("Fall")),
+            )
+        )
+
+        fiscal_year_start_month = 4  # fiscal year starts in April
+
+        stg_day = (
+            stg_day.withColumn(
+                "FiscalYear",
+                when(
+                    month(col("date")) >= fiscal_year_start_month, year(col("date")) + 1
+                ).otherwise(year(col("date"))),
+            )
+            .withColumn(
+                "FiscalQuarter",
+                expr(
+                    f"ceil((month(date) - {fiscal_year_start_month} + 12) % 12 / 3) + 1"
+                ),
+            )
+            .withColumn(
+                "FiscalMonth",
+                expr(f"(month(date) - {fiscal_year_start_month} + 12) % 12 + 1"),
+            )
+            .withColumn(
+                "FirstDayOfFiscalYear",
+                expr(
+                    f"case when month(date) >= {fiscal_year_start_month} then to_date(concat(year(date) + 1, '-{fiscal_year_start_month}-01'))"
+                    + f"else to_date(concat(year(date), '-{fiscal_year_start_month}-01')) end"
+                ),
+            )
+            .withColumn(
+                "LastDayOfFiscalYear",
+                expr(
+                    f"date_sub(add_months(to_date(concat(FiscalYear, '-{fiscal_year_start_month}-01')), 12), 1)"
+                ),
+            )
+            .withColumn(
+                "FirstDayOfFiscalQuarter",
+                expr(
+                    f"case when month(date) in ({fiscal_year_start_month},{fiscal_year_start_month+1},{fiscal_year_start_month+2}) then to_date(concat(year(date), '-{fiscal_year_start_month}-01'))"
+                    + f"when month(date) in ({fiscal_year_start_month+3},{fiscal_year_start_month+4},{fiscal_year_start_month+5}) then to_date(concat(year(date), '-{fiscal_year_start_month+3}-01'))"
+                    + f"when month(date) in ({fiscal_year_start_month+6},{fiscal_year_start_month+7},{fiscal_year_start_month+8}) then to_date(concat(year(date), '-{fiscal_year_start_month+6}-01'))"
+                    + f"else to_date(concat(year(date), '-{fiscal_year_start_month+9}-01')) end"
+                ),
+            )
+            .withColumn(
+                "LastDayOfFiscalQuarter",
+                expr("date_sub(add_months(FirstDayOfFiscalQuarter, 3), 1)"),
+            )
+        )
+
+        stg_day.cache()
+
+        stg_week = stg_day.where(col("DayOfWeek").isin(1))
+
+        stg_month = stg_day.where(col("DayOfMonth").isin(1))
+
+        stg_day = stg_day.where(
+            (~col("DayOfWeek").isin(1)) & (~col("DayOfMonth").isin(1))
+        )
+
         f = open(f"{home}/ev_registration.json", "r")
 
         raw = json.load(f)
@@ -169,15 +314,62 @@ class Job:
             raw["data"], schema=stg_ev_registration_schema
         )
 
-        self.spark.sql("create schema if not exists stg")
-
         self.spark.sql("use stg")
+
+        stg_day.write.option("path", f"{warehouse}/stg").mode("overwrite").saveAsTable(
+            "day"
+        )
+
+        int_day = self.spark.sql(
+            """
+        select
+            date,
+            DateKey,
+            FullDate,
+            DayOfMonth,
+            DaySuffix,
+            DayName,
+            DayOfWeek,
+            IsWeekend,
+            WeekOfYear,
+            Month,
+            MonthName,
+            Quarter,
+            Year,
+            DayOfYear,
+            WeekOfMonth,
+            FirstDayOfMonth,
+            LastDayOfMonth,
+            FirstDayOfQuarter,
+            LastDayOfQuarter,
+            IsLeapYear,
+            Season,
+            FiscalYear,
+            FiscalQuarter,
+            FiscalMonth,
+            FirstDayOfFiscalYear,
+            LastDayOfFiscalYear,
+            FirstDayOfFiscalQuarter,
+            LastDayOfFiscalQuarter
+        from stg.day
+        """
+        )
+
+        stg_week.write.option("path", f"{warehouse}/stg").mode("overwrite").saveAsTable(
+            "week"
+        )
+
+        self.spark.sql("select * from stg.week").show(5)
+
+        stg_month.write.option("path", f"{warehouse}/stg").mode(
+            "overwrite"
+        ).saveAsTable("month")
+
+        self.spark.sql("select * from stg.month").show(5)
 
         stg_ev_registration.write.option("path", f"{warehouse}/stg").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
-
-        self.spark.sql("select * from stg.ev_registration").show(5)
 
         int_ev_registration = self.spark.sql(
             """
@@ -207,149 +399,17 @@ class Job:
         """
         )
 
-        self.spark.sql("create schema if not exists int")
+        int_day = self.spark.sql(
+            """
+            select * from stg.day
+        """
+        )
 
         self.spark.sql("use int")
 
         int_ev_registration.write.option("path", f"{warehouse}/int").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
-
-        self.spark.sql("select * from int.ev_registration").show(5)
-
-        start_date, end_date = "2020-01-01", "2030-01-01"
-
-        df_date = spark.sql(
-            f"select sequence(to_date('{start_date}'), to_date('{end_date}'), interval 1 day) as seq"
-        )
-
-        df_date = df_date.select(explode(col("seq")).alias("date"))
-
-        dim_day = (
-            df_date.withColumn(
-                "DateKey", date_format(col("date"), "yyyyMMdd").cast("int")
-            )
-            .withColumn("FullDate", col("date"))
-            .withColumn("DayOfMonth", dayofmonth(col("date")))
-            .withColumn(
-                "DaySuffix",
-                when(col("DayOfMonth").isin(1, 21, 31), lit("st"))
-                .when(col("DayOfMonth").isin(2, 22), lit("nd"))
-                .when(col("DayOfMonth").isin(3, 23), lit("rd"))
-                .otherwise(lit("th")),
-            )
-            .withColumn("DayName", date_format(col("date"), "EEEE"))
-            .withColumn("DayOfWeek", dayofweek(col("date")))
-            .withColumn(
-                "IsWeekend",
-                when(dayofweek(col("date")).isin(1, 7), lit(1)).otherwise(lit(0)),
-            )
-            .withColumn("WeekOfYear", weekofyear(col("date")))
-            .withColumn("Month", month(col("date")))
-            .withColumn("MonthName", date_format(col("date"), "MMMM"))
-            .withColumn("Quarter", quarter(col("date")))
-            .withColumn("Year", year(col("date")))
-            .withColumn("DayOfYear", dayofyear(col("date")))
-            .withColumn("WeekOfMonth", expr("ceil(dayofmonth(date) / 7)"))
-            .withColumn(
-                "FirstDayOfMonth", expr("date_sub(date_add(date, 1-day(date)), 0)")
-            )
-            .withColumn(
-                "LastDayOfMonth",
-                expr("date_sub(date_add(date, 1-day(add_months(date, 1))), 1)"),
-            )
-            .withColumn(
-                "FirstDayOfQuarter",
-                expr(
-                    "case when month(date) in (1,2,3) then date_sub(date_add(date, 1-day(date)), 0) "
-                    + "when month(date) in (4,5,6) then date_sub(date_add(date, 1-day(date) + 90 - mod(dayofyear(date), 90)), 0) "
-                    + "when month(date) in (7,8,9) then date_sub(date_add(date, 1-day(date) + 181 - mod(dayofyear(date), 91)), 0) "
-                    + "else date_sub(date_add(date, 1-day(date) + 273 - mod(dayofyear(date), 92)), 0) end"
-                ),
-            )
-            .withColumn(
-                "LastDayOfQuarter",
-                expr(
-                    "case when month(date) in (1,2,3) then date_sub(date_add(date, 1-day(add_months(date, 3))), 1) "
-                    + "when month(date) in (4,5,6) then date_sub(date_add(date, 1-day(add_months(date, 6))), 1) "
-                    + "when month(date) in (7,8,9) then date_sub(date_add(date, 1-day(add_months(date, 9))), 1) "
-                    + "else date_sub(date_add(date, 1-day(add_months(date, 12))), 1) end"
-                ),
-            )
-            .withColumn(
-                "IsLeapYear",
-                when(
-                    expr(
-                        "mod(year(date), 4) == 0 and (mod(year(date), 100) != 0 or mod(year(date), 400) == 0)"
-                    ),
-                    lit(1),
-                ).otherwise(lit(0)),
-            )
-            .withColumn(
-                "Season",
-                when(col("Month").isin(12, 1, 2), lit("Winter"))
-                .when(col("Month").isin(3, 4, 5), lit("Spring"))
-                .when(col("Month").isin(6, 7, 8), lit("Summer"))
-                .otherwise(lit("Fall")),
-            )
-        )
-
-        fiscal_year_start_month = 4  # For example, fiscal year starts in April
-
-        dim_day = (
-            dim_day.withColumn(
-                "FiscalYear",
-                when(
-                    month(col("date")) >= fiscal_year_start_month, year(col("date")) + 1
-                ).otherwise(year(col("date"))),
-            )
-            .withColumn(
-                "FiscalQuarter",
-                expr(
-                    f"ceil((month(date) - {fiscal_year_start_month} + 12) % 12 / 3) + 1"
-                ),
-            )
-            .withColumn(
-                "FiscalMonth",
-                expr(f"(month(date) - {fiscal_year_start_month} + 12) % 12 + 1"),
-            )
-            .withColumn(
-                "FirstDayOfFiscalYear",
-                expr(
-                    f"case when month(date) >= {fiscal_year_start_month} then to_date(concat(year(date) + 1, '-{fiscal_year_start_month}-01'))"
-                    + f"else to_date(concat(year(date), '-{fiscal_year_start_month}-01')) end"
-                ),
-            )
-            .withColumn(
-                "LastDayOfFiscalYear",
-                expr(
-                    f"date_sub(add_months(to_date(concat(FiscalYear, '-{fiscal_year_start_month}-01')), 12), 1)"
-                ),
-            )
-            .withColumn(
-                "FirstDayOfFiscalQuarter",
-                expr(
-                    f"case when month(date) in ({fiscal_year_start_month},{fiscal_year_start_month+1},{fiscal_year_start_month+2}) then to_date(concat(year(date), '-{fiscal_year_start_month}-01'))"
-                    + f"when month(date) in ({fiscal_year_start_month+3},{fiscal_year_start_month+4},{fiscal_year_start_month+5}) then to_date(concat(year(date), '-{fiscal_year_start_month+3}-01'))"
-                    + f"when month(date) in ({fiscal_year_start_month+6},{fiscal_year_start_month+7},{fiscal_year_start_month+8}) then to_date(concat(year(date), '-{fiscal_year_start_month+6}-01'))"
-                    + f"else to_date(concat(year(date), '-{fiscal_year_start_month+9}-01')) end"
-                ),
-            )
-            .withColumn(
-                "LastDayOfFiscalQuarter",
-                expr("date_sub(add_months(FirstDayOfFiscalQuarter, 3), 1)"),
-            )
-        )
-
-        dim_day.cache()
-
-        dim_week = dim_day.where(col("DayOfWeek").isin(1))
-
-        dim_month = dim_day.where(col("DayOfMonth").isin(1))
-
-        dim_day = dim_day.where(~col("DayOfWeek").isin(1))
-
-        dim_day = dim_day.where(~col("DayOfMonth").isin(1))
 
         dim_location = self.spark.sql(
             """
