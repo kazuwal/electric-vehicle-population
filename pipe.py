@@ -182,14 +182,6 @@ class Job:
         int_ev_registration = self.spark.sql(
             """
             select
-            sid,
-            id,
-            position,
-            created_at,
-            created_meta,
-            updated_at,
-            updated_meta,
-            meta,
             vin,
             county,
             city,
