@@ -70,10 +70,10 @@ class Job:
             f"select sequence(to_date('{start_date}'), to_date('{end_date}'), interval 1 day) as seq"
         )
 
-        stg_date = df_date.select(explode(col("seq")).alias("date"))
+        df_date = df_date.select(explode(col("seq")).alias("date"))
 
         stg_day = (
-            stg_date.withColumn(
+            df_date.withColumn(
                 "DateKey", date_format(col("date"), "yyyyMMdd").cast("int")
             )
             .withColumn("FullDate", col("date"))
