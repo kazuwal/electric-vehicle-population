@@ -51,7 +51,9 @@ class Job:
             opts = {}
 
         home = "/opt/app"
-        warehouse = "file:/opt/bitnami/spark/spark-warehouse"
+
+        staging = "file:/opt/bitnami/spark/spark-warehouse/stg"
+        integration = "file:/opt/bitnami/spark/spark-warehouse/int"
 
         """
             create schemas
@@ -316,58 +318,128 @@ class Job:
 
         self.spark.sql("use stg")
 
-        stg_day.write.option("path", f"{warehouse}/stg").mode("overwrite").saveAsTable(
+        stg_day.write.option("path", f"{staging}/day").mode("overwrite").saveAsTable(
             "day"
         )
 
         int_day = self.spark.sql(
             """
-        select
-            date,
-            DateKey,
-            FullDate,
-            DayOfMonth,
-            DaySuffix,
-            DayName,
-            DayOfWeek,
-            IsWeekend,
-            WeekOfYear,
-            Month,
-            MonthName,
-            Quarter,
-            Year,
-            DayOfYear,
-            WeekOfMonth,
-            FirstDayOfMonth,
-            LastDayOfMonth,
-            FirstDayOfQuarter,
-            LastDayOfQuarter,
-            IsLeapYear,
-            Season,
-            FiscalYear,
-            FiscalQuarter,
-            FiscalMonth,
-            FirstDayOfFiscalYear,
-            LastDayOfFiscalYear,
-            FirstDayOfFiscalQuarter,
-            LastDayOfFiscalQuarter
-        from stg.day
+                select
+                    date,
+                    DateKey,
+                    FullDate,
+                    DayOfMonth,
+                    DaySuffix,
+                    DayName,
+                    DayOfWeek,
+                    IsWeekend,
+                    WeekOfYear,
+                    Month,
+                    MonthName,
+                    Quarter,
+                    Year,
+                    DayOfYear,
+                    WeekOfMonth,
+                    FirstDayOfMonth,
+                    LastDayOfMonth,
+                    FirstDayOfQuarter,
+                    LastDayOfQuarter,
+                    IsLeapYear,
+                    Season,
+                    FiscalYear,
+                    FiscalQuarter,
+                    FiscalMonth,
+                    FirstDayOfFiscalYear,
+                    LastDayOfFiscalYear,
+                    FirstDayOfFiscalQuarter,
+                    LastDayOfFiscalQuarter
+                from stg.day
         """
         )
 
-        stg_week.write.option("path", f"{warehouse}/stg").mode("overwrite").saveAsTable(
+        stg_week.write.option("path", f"{staging}/week").mode("overwrite").saveAsTable(
             "week"
         )
 
-        self.spark.sql("select * from stg.week").show(5)
+        int_week = self.spark.sql(
+            """
+                select
+                    date,
+                    DateKey,
+                    FullDate,
+                    DayOfMonth,
+                    DaySuffix,
+                    DayName,
+                    DayOfWeek,
+                    IsWeekend,
+                    WeekOfYear,
+                    Month,
+                    MonthName,
+                    Quarter,
+                    Year,
+                    DayOfYear,
+                    WeekOfMonth,
+                    FirstDayOfMonth,
+                    LastDayOfMonth,
+                    FirstDayOfQuarter,
+                    LastDayOfQuarter,
+                    IsLeapYear,
+                    Season,
+                    FiscalYear,
+                    FiscalQuarter,
+                    FiscalMonth,
+                    FirstDayOfFiscalYear,
+                    LastDayOfFiscalYear,
+                    FirstDayOfFiscalQuarter,
+                    LastDayOfFiscalQuarter
+                from stg.week
+        """
+        )
 
-        stg_month.write.option("path", f"{warehouse}/stg").mode(
+        stg_month.write.option("path", f"{staging}/month").mode(
             "overwrite"
         ).saveAsTable("month")
 
-        self.spark.sql("select * from stg.month").show(5)
+        int_month = self.spark.sql(
+            """
+                select
+                    date,
+                    DateKey,
+                    FullDate,
+                    DayOfMonth,
+                    DaySuffix,
+                    DayName,
+                    DayOfWeek,
+                    IsWeekend,
+                    WeekOfYear,
+                    Month,
+                    MonthName,
+                    Quarter,
+                    Year,
+                    DayOfYear,
+                    WeekOfMonth,
+                    FirstDayOfMonth,
+                    LastDayOfMonth,
+                    FirstDayOfQuarter,
+                    LastDayOfQuarter,
+                    IsLeapYear,
+                    Season,
+                    FiscalYear,
+                    FiscalQuarter,
+                    FiscalMonth,
+                    FirstDayOfFiscalYear,
+                    LastDayOfFiscalYear,
+                    FirstDayOfFiscalQuarter,
+                    LastDayOfFiscalQuarter
+                from stg.month
+        """
+        )
 
-        stg_ev_registration.write.option("path", f"{warehouse}/stg").mode(
+        int_day.show(5)
+        int_week.show(5)
+        int_month.show(5)
+
+        stg_ev_registration.write.option("path", f"{staging}/ev_registration").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
 
@@ -407,7 +479,7 @@ class Job:
 
         self.spark.sql("use int")
 
-        int_ev_registration.write.option("path", f"{warehouse}/int").mode(
+        int_ev_registration.write.option("path", f"{integration}/ev_registration").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
 
