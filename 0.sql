@@ -16,7 +16,7 @@ grant all privileges on database pyspark_sql_recipes to dev;
 
 \connect pyspark_sql_recipes kazuwal;
 
-create schema raw;
+create schema stg;
 
 create database electric_vehicles;
 
@@ -24,6 +24,6 @@ grant all privileges on database electric_vehicles to dev;
 
 \connect electric_vehicles kazuwal;
 
-create schema raw;
+create schema stg;
 create schema int;
 create schema mrt;

@@ -66,6 +66,8 @@ class Job:
             create date dimension tables
         """
 
+        self.spark.sql("use stg")
+
         start_date, end_date = "2020-01-01", "2030-01-01"
 
         df_date = spark.sql(
@@ -316,11 +318,23 @@ class Job:
             raw["data"], schema=stg_ev_registration_schema
         )
 
-        self.spark.sql("use stg")
-
         stg_day.write.option("path", f"{staging}/day").mode("overwrite").saveAsTable(
             "day"
         )
+
+        stg_week.write.option("path", f"{staging}/week").mode("overwrite").saveAsTable(
+            "week"
+        )
+
+        stg_month.write.option("path", f"{staging}/month").mode(
+            "overwrite"
+        ).saveAsTable("month")
+
+        stg_ev_registration.write.option("path", f"{staging}/ev_registration").mode(
+            "overwrite"
+        ).saveAsTable("ev_registration")
+
+        self.spark.sql("use int")
 
         int_day = self.spark.sql(
             """
@@ -355,10 +369,6 @@ class Job:
                     LastDayOfFiscalQuarter
                 from stg.day
         """
-        )
-
-        stg_week.write.option("path", f"{staging}/week").mode("overwrite").saveAsTable(
-            "week"
         )
 
         int_week = self.spark.sql(
@@ -396,10 +406,6 @@ class Job:
         """
         )
 
-        stg_month.write.option("path", f"{staging}/month").mode(
-            "overwrite"
-        ).saveAsTable("month")
-
         int_month = self.spark.sql(
             """
                 select
@@ -435,10 +441,6 @@ class Job:
         """
         )
 
-        stg_ev_registration.write.option("path", f"{staging}/ev_registration").mode(
-            "overwrite"
-        ).saveAsTable("ev_registration")
-
         int_ev_registration = self.spark.sql(
             """
             select
@@ -472,8 +474,6 @@ class Job:
             select * from stg.day
         """
         )
-
-        self.spark.sql("use int")
 
         int_ev_registration.write.option("path", f"{integration}/ev_registration").mode(
             "overwrite"
