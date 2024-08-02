@@ -70,7 +70,7 @@ class Job:
 
         start_date, end_date = "2020-01-01", "2030-01-01"
 
-        df_date = spark.sql(
+        df_date = self.spark.sql(
             f"select sequence(to_date('{start_date}'), to_date('{end_date}'), interval 1 day) as seq"
         )
 
@@ -108,87 +108,6 @@ class Job:
             .withColumn(
                 "LastDayOfMonth",
                 expr("date_sub(date_add(date, 1-day(add_months(date, 1))), 1)"),
-            )
-            .withColumn(
-                "FirstDayOfQuarter",
-                expr(
-                    "case when month(date) in (1,2,3) then date_sub(date_add(date, 1-day(date)), 0) "
-                    + "when month(date) in (4,5,6) then date_sub(date_add(date, 1-day(date) + 90 - mod(dayofyear(date), 90)), 0) "
-                    + "when month(date) in (7,8,9) then date_sub(date_add(date, 1-day(date) + 181 - mod(dayofyear(date), 91)), 0) "
-                    + "else date_sub(date_add(date, 1-day(date) + 273 - mod(dayofyear(date), 92)), 0) end"
-                ),
-            )
-            .withColumn(
-                "LastDayOfQuarter",
-                expr(
-                    "case when month(date) in (1,2,3) then date_sub(date_add(date, 1-day(add_months(date, 3))), 1) "
-                    + "when month(date) in (4,5,6) then date_sub(date_add(date, 1-day(add_months(date, 6))), 1) "
-                    + "when month(date) in (7,8,9) then date_sub(date_add(date, 1-day(add_months(date, 9))), 1) "
-                    + "else date_sub(date_add(date, 1-day(add_months(date, 12))), 1) end"
-                ),
-            )
-            .withColumn(
-                "IsLeapYear",
-                when(
-                    expr(
-                        "mod(year(date), 4) == 0 and (mod(year(date), 100) != 0 or mod(year(date), 400) == 0)"
-                    ),
-                    lit(1),
-                ).otherwise(lit(0)),
-            )
-            .withColumn(
-                "Season",
-                when(col("Month").isin(12, 1, 2), lit("Winter"))
-                .when(col("Month").isin(3, 4, 5), lit("Spring"))
-                .when(col("Month").isin(6, 7, 8), lit("Summer"))
-                .otherwise(lit("Fall")),
-            )
-        )
-
-        fiscal_year_start_month = 4  # fiscal year starts in April
-
-        stg_day = (
-            stg_day.withColumn(
-                "FiscalYear",
-                when(
-                    month(col("date")) >= fiscal_year_start_month, year(col("date")) + 1
-                ).otherwise(year(col("date"))),
-            )
-            .withColumn(
-                "FiscalQuarter",
-                expr(
-                    f"ceil((month(date) - {fiscal_year_start_month} + 12) % 12 / 3) + 1"
-                ),
-            )
-            .withColumn(
-                "FiscalMonth",
-                expr(f"(month(date) - {fiscal_year_start_month} + 12) % 12 + 1"),
-            )
-            .withColumn(
-                "FirstDayOfFiscalYear",
-                expr(
-                    f"case when month(date) >= {fiscal_year_start_month} then to_date(concat(year(date) + 1, '-{fiscal_year_start_month}-01'))"
-                    + f"else to_date(concat(year(date), '-{fiscal_year_start_month}-01')) end"
-                ),
-            )
-            .withColumn(
-                "LastDayOfFiscalYear",
-                expr(
-                    f"date_sub(add_months(to_date(concat(FiscalYear, '-{fiscal_year_start_month}-01')), 12), 1)"
-                ),
-            )
-            .withColumn(
-                "FirstDayOfFiscalQuarter",
-                expr(
-                    f"case when month(date) in ({fiscal_year_start_month},{fiscal_year_start_month+1},{fiscal_year_start_month+2}) then to_date(concat(year(date), '-{fiscal_year_start_month}-01'))"
-                    + f"when month(date) in ({fiscal_year_start_month+3},{fiscal_year_start_month+4},{fiscal_year_start_month+5}) then to_date(concat(year(date), '-{fiscal_year_start_month+3}-01'))"
-                    + f"when month(date) in ({fiscal_year_start_month+6},{fiscal_year_start_month+7},{fiscal_year_start_month+8}) then to_date(concat(year(date), '-{fiscal_year_start_month+6}-01'))"
-                    + f"else to_date(concat(year(date), '-{fiscal_year_start_month+9}-01')) end"
-                ),
-            )
-            .withColumn(
-                "LastDayOfFiscalQuarter",
-                expr("date_sub(add_months(FirstDayOfFiscalQuarter, 3), 1)"),
             )
         )
 
@@ -355,21 +274,12 @@ class Job:
                     DayOfYear,
                     WeekOfMonth,
                     FirstDayOfMonth,
-                    LastDayOfMonth,
-                    FirstDayOfQuarter,
-                    LastDayOfQuarter,
-                    IsLeapYear,
-                    Season,
-                    FiscalYear,
-                    FiscalQuarter,
-                    FiscalMonth,
-                    FirstDayOfFiscalYear,
-                    LastDayOfFiscalYear,
-                    FirstDayOfFiscalQuarter,
-                    LastDayOfFiscalQuarter
+                    LastDayOfMonth
                 from stg.day
         """
         )
+
+        int_day.show(10)
 
         int_week = self.spark.sql(
             """
@@ -377,34 +287,17 @@ class Job:
                     date,
                     DateKey,
                     FullDate,
-                    DayOfMonth,
-                    DaySuffix,
-                    DayName,
-                    DayOfWeek,
-                    IsWeekend,
                     WeekOfYear,
                     Month,
                     MonthName,
                     Quarter,
                     Year,
-                    DayOfYear,
-                    WeekOfMonth,
-                    FirstDayOfMonth,
-                    LastDayOfMonth,
-                    FirstDayOfQuarter,
-                    LastDayOfQuarter,
-                    IsLeapYear,
-                    Season,
-                    FiscalYear,
-                    FiscalQuarter,
-                    FiscalMonth,
-                    FirstDayOfFiscalYear,
-                    LastDayOfFiscalYear,
-                    FirstDayOfFiscalQuarter,
-                    LastDayOfFiscalQuarter
+                    WeekOfMonth
                 from stg.week
         """
         )
+
+        int_week.show(10)
 
         int_month = self.spark.sql(
             """
@@ -412,34 +305,15 @@ class Job:
                     date,
                     DateKey,
                     FullDate,
-                    DayOfMonth,
-                    DaySuffix,
-                    DayName,
-                    DayOfWeek,
-                    IsWeekend,
-                    WeekOfYear,
                     Month,
                     MonthName,
                     Quarter,
-                    Year,
-                    DayOfYear,
-                    WeekOfMonth,
-                    FirstDayOfMonth,
-                    LastDayOfMonth,
-                    FirstDayOfQuarter,
-                    LastDayOfQuarter,
-                    IsLeapYear,
-                    Season,
-                    FiscalYear,
-                    FiscalQuarter,
-                    FiscalMonth,
-                    FirstDayOfFiscalYear,
-                    LastDayOfFiscalYear,
-                    FirstDayOfFiscalQuarter,
-                    LastDayOfFiscalQuarter
+                    Year
                 from stg.month
         """
         )
+
+        int_month.show(10)
 
         int_ev_registration = self.spark.sql(
             """
