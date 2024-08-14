@@ -132,10 +132,6 @@ class Job:
 
         stg_month = stg_day.where(col("DayOfMonth").isin(1))
 
-        stg_day = stg_day.where(
-            (~col("DayOfWeek").isin(1)) & (~col("DayOfMonth").isin(1))
-        )
-
         f = open(f"{home}/ev_registration.json", "r")
 
         raw = json.load(f)
