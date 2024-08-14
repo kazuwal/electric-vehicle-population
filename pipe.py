@@ -31,6 +31,9 @@ from pyspark.sql.functions import (
     split,
     expr,
     when,
+    first,
+    min,
+    max
 )
 
 
@@ -114,6 +117,18 @@ class Job:
         stg_day.cache()
 
         stg_week = stg_day.where(col("DayOfWeek").isin(1))
+
+        stg_week = stg_day.groupBy("Year", "WeekOfYear").agg(
+            min(col("FullDate")).alias("WeekStartDate"),
+            max(col("FullDate")).alias("WeekEndDate"),
+            first("date").alias("date"),
+            first("FullDate").alias("FullDate"),
+            first("DateKey").alias("DateKey"),
+            first("Month").alias("Month"),
+            first("MonthName").alias("MonthName"),
+            first("Quarter").alias("Quarter"),
+            first("WeekOfMonth").alias("WeekOfMonth")
+        )
 
         stg_month = stg_day.where(col("DayOfMonth").isin(1))
 
