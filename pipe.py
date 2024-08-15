@@ -81,56 +81,63 @@ class Job:
 
         stg_day = (
             df_date.withColumn(
-                "DateKey", date_format(col("date"), "yyyyMMdd").cast("int")
+                "date_key", date_format(col("date"), "yyyyMMdd").cast("int")
             )
-            .withColumn("FullDate", col("date"))
-            .withColumn("DayOfMonth", dayofmonth(col("date")))
+            .withColumn("day_of_month", dayofmonth(col("date")))
             .withColumn(
-                "DaySuffix",
-                when(col("DayOfMonth").isin(1, 21, 31), lit("st"))
-                .when(col("DayOfMonth").isin(2, 22), lit("nd"))
-                .when(col("DayOfMonth").isin(3, 23), lit("rd"))
+                "day_suffix",
+                when(col("day_of_month").isin(1, 21, 31), lit("st"))
+                .when(col("day_of_month").isin(2, 22), lit("nd"))
+                .when(col("day_of_month").isin(3, 23), lit("rd"))
                 .otherwise(lit("th")),
             )
-            .withColumn("DayName", date_format(col("date"), "EEEE"))
-            .withColumn("DayOfWeek", dayofweek(col("date")))
+            .withColumn("day_name", date_format(col("date"), "EEEE"))
+            .withColumn("day_of_week", dayofweek(col("date")))
             .withColumn(
-                "IsWeekend",
+                "is_weekend",
                 when(dayofweek(col("date")).isin(1, 7), lit(1)).otherwise(lit(0)),
             )
-            .withColumn("WeekOfYear", weekofyear(col("date")))
-            .withColumn("Month", month(col("date")))
-            .withColumn("MonthName", date_format(col("date"), "MMMM"))
-            .withColumn("Quarter", quarter(col("date")))
-            .withColumn("Year", year(col("date")))
-            .withColumn("DayOfYear", dayofyear(col("date")))
-            .withColumn("WeekOfMonth", expr("ceil(dayofmonth(date) / 7)"))
+            .withColumn("week_of_year", weekofyear(col("date")))
+            .withColumn("month", month(col("date")))
+            .withColumn("month_name", date_format(col("date"), "MMMM"))
+            .withColumn("quarter", quarter(col("date")))
+            .withColumn("year", year(col("date")))
+            .withColumn("day_of_year", dayofyear(col("date")))
+            .withColumn("week_of_month", expr("ceil(dayofmonth(date) / 7)"))
             .withColumn(
-                "FirstDayOfMonth", expr("date_sub(date_add(date, 1-day(date)), 0)")
+                "first_day_of_month", expr("date_sub(date_add(date, 1-day(date)), 0)")
             )
             .withColumn(
-                "LastDayOfMonth",
+                "last_day_of_month",
                 expr("date_sub(date_add(date, 1-day(add_months(date, 1))), 1)"),
             )
         )
+       
+        # week of the month
+        stg_day = stg_day.join(
+            stg_day.groupBy("year", "week_of_year").agg(
+            min(col("date")).alias("week_start_date"),
+            max(col("date")).alias("week_end_date"),
+            ),
+            on=["year", "week_of_year"],
+            how="left"
+        )
+
+        assert stg_day.count() == 3654
 
         stg_day.cache()
 
-        stg_week = stg_day.where(col("DayOfWeek").isin(1))
+        stg_week = stg_day.select("date", "date_key", "week_start_date", "week_end_date", "year", "month", "month_name", "quarter", "week_of_month", "week_of_year")
 
-        stg_week = stg_day.groupBy("Year", "WeekOfYear").agg(
-            min(col("FullDate")).alias("WeekStartDate"),
-            max(col("FullDate")).alias("WeekEndDate"),
-            first("date").alias("date"),
-            first("FullDate").alias("FullDate"),
-            first("DateKey").alias("DateKey"),
-            first("Month").alias("Month"),
-            first("MonthName").alias("MonthName"),
-            first("Quarter").alias("Quarter"),
-            first("WeekOfMonth").alias("WeekOfMonth")
-        )
+        # assert stg_week.count() > stg_week.dropDuplicates(stg_week.columns).count()
 
-        stg_month = stg_day.where(col("DayOfMonth").isin(1))
+        # mask = stg_week.groupBy(stg_week.columns).count().select(col("count") > 1)
+
+        # duplicates = stg_week.join(mask, stg_week.columns, "inner").select(stg_week["*"])
+
+        # duplicates.show()
+
+        stg_month = stg_day.where(col("day_of_month").isin(1))
 
         f = open(f"{home}/ev_registration.json", "r")
 
@@ -270,22 +277,21 @@ class Job:
             """
                 select
                     date,
-                    DateKey,
-                    FullDate,
-                    DayOfMonth,
-                    DaySuffix,
-                    DayName,
-                    DayOfWeek,
-                    IsWeekend,
-                    WeekOfYear,
-                    Month,
-                    MonthName,
-                    Quarter,
-                    Year,
-                    DayOfYear,
-                    WeekOfMonth,
-                    FirstDayOfMonth,
-                    LastDayOfMonth
+                    date_key,
+                    day_of_month,
+                    day_suffix,
+                    day_name,
+                    day_of_week,
+                    is_weekend,
+                    week_of_year,
+                    month,
+                    month_name,
+                    quarter,
+                    year,
+                    day_of_year,
+                    week_of_month,
+                    first_day_of_month,
+                    last_day_of_month
                 from stg.day
         """
         )
@@ -296,30 +302,30 @@ class Job:
             """
                 select
                     date,
-                    DateKey,
-                    FullDate,
-                    WeekOfYear,
-                    Month,
-                    MonthName,
-                    Quarter,
-                    Year,
-                    WeekOfMonth
+                    date_key,
+                    week_of_year,
+                    week_start_date,
+                    week_end_date,
+                    month,
+                    month_name,
+                    quarter,
+                    year,
+                    week_of_month
                 from stg.week
         """
         )
 
-        int_week.show(10)
+        int_week.orderBy("week_of_year", ascending=False).show(10)
 
         int_month = self.spark.sql(
             """
                 select
                     date,
-                    DateKey,
-                    FullDate,
-                    Month,
-                    MonthName,
-                    Quarter,
-                    Year
+                    date_key,
+                    month,
+                    month_name,
+                    quarter,
+                    year
                 from stg.month
         """
         )
