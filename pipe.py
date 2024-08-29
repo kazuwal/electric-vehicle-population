@@ -66,6 +66,7 @@ class Job:
 
         self.spark.sql("create schema if not exists bronze")
         self.spark.sql("create schema if not exists silver")
+        self.spark.sql("create schema if not exists gold")
 
         """
             create date dimension tables
