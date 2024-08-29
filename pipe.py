@@ -56,21 +56,22 @@ class Job:
 
         home = "/opt/app"
 
-        staging = "file:/opt/bitnami/spark/spark-warehouse/stg"
-        integration = "file:/opt/bitnami/spark/spark-warehouse/int"
+        bronze = "file:/opt/bitnami/spark/spark-warehouse/bronze"
+        silver = "file:/opt/bitnami/spark/spark-warehouse/silver"
+        gold = "file:/opt/bitnami/spark/spark-warehouse/gold"
 
         """
             create schemas
         """
 
-        self.spark.sql("create schema if not exists stg")
-        self.spark.sql("create schema if not exists int")
+        self.spark.sql("create schema if not exists bronze")
+        self.spark.sql("create schema if not exists silver")
 
         """
             create date dimension tables
         """
 
-        self.spark.sql("use stg")
+        self.spark.sql("use bronze")
 
         start_date, end_date = "2020-01-01", "2030-01-01"
 
@@ -80,7 +81,7 @@ class Job:
 
         df_date = df_date.select(explode(col("seq")).alias("date"))
 
-        stg_day = (
+        bronze_day = (
             df_date.withColumn(
                 "date_key", date_format(col("date"), "yyyyMMdd").cast("int")
             )
@@ -114,11 +115,11 @@ class Job:
             )
         )
 
-        stg_day.cache()
+        bronze_day.cache()
 
-        assert stg_day.count() == 3654
+        assert bronze_day.count() == 3654
 
-        stg_week = stg_day.groupBy("year", "week_of_year").agg(
+        bronze_week = bronze_day.groupBy("year", "week_of_year").agg(
             min("date").alias("date"),  # Get the first date of the week
             first("date_key").alias("date_key"),
             first("month").alias("month"),
@@ -127,9 +128,12 @@ class Job:
             first("week_of_month").alias("week_of_month"),
         )
 
-        assert stg_week.count() == stg_week.dropDuplicates(stg_week.columns).count()
+        assert (
+            bronze_week.count()
+            == bronze_week.dropDuplicates(bronze_week.columns).count()
+        )
 
-        stg_month = stg_day.where(col("day_of_month").isin(1))
+        bronze_month = bronze_day.where(col("day_of_month").isin(1))
 
         f = open(f"{home}/ev_registration.json", "r")
 
@@ -207,7 +211,7 @@ class Job:
             .withColumn("source_columns", explode_outer("source_columns"))
         )
 
-        stg_ev_registration_schema = StructType(
+        bronze_ev_registration_schema = StructType(
             [
                 StructField("sid", StringType()),
                 StructField("id", StringType()),
@@ -243,29 +247,29 @@ class Job:
             ]
         )
 
-        stg_ev_registration = self.spark.createDataFrame(
-            raw["data"], schema=stg_ev_registration_schema
+        bronze_ev_registration = self.spark.createDataFrame(
+            raw["data"], schema=bronze_ev_registration_schema
         )
 
-        stg_day.write.option("path", f"{staging}/day").mode("overwrite").saveAsTable(
+        bronze_day.write.option("path", f"{bronze}/day").mode("overwrite").saveAsTable(
             "day"
         )
 
-        stg_week.write.option("path", f"{staging}/week").mode("overwrite").saveAsTable(
-            "week"
-        )
+        bronze_week.write.option("path", f"{bronze}/week").mode(
+            "overwrite"
+        ).saveAsTable("week")
 
-        stg_month.write.option("path", f"{staging}/month").mode(
+        bronze_month.write.option("path", f"{bronze}/month").mode(
             "overwrite"
         ).saveAsTable("month")
 
-        stg_ev_registration.write.option("path", f"{staging}/ev_registration").mode(
+        bronze_ev_registration.write.option("path", f"{bronze}/ev_registration").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
 
-        self.spark.sql("use int")
+        self.spark.sql("use silver")
 
-        int_day = self.spark.sql(
+        silver_day = self.spark.sql(
             """
                 select
                     date,
@@ -284,13 +288,13 @@ class Job:
                     week_of_month,
                     first_day_of_month,
                     last_day_of_month
-                from stg.day
+                from bronze.day
         """
         )
 
-        int_day.show(10)
+        silver_day.show(10)
 
-        int_week = self.spark.sql(
+        silver_week = self.spark.sql(
             """
                 select
                     date,
@@ -301,13 +305,13 @@ class Job:
                     quarter,
                     year,
                     week_of_month
-                from stg.week
+                from bronze.week
         """
         )
 
-        int_week.show(10)
+        silver_week.show(10)
 
-        int_month = self.spark.sql(
+        silver_month = self.spark.sql(
             """
                 select
                     date,
@@ -316,13 +320,13 @@ class Job:
                     month_name,
                     quarter,
                     year
-                from stg.month
+                from bronze.month
         """
         )
 
-        int_month.show(10)
+        silver_month.show(10)
 
-        int_ev_registration = self.spark.sql(
+        silver_ev_registration = self.spark.sql(
             """
             select
             vin,
@@ -346,17 +350,17 @@ class Job:
             counties,
             cast(congressional_districts as int),
             cast(legislative_district_boundary as int)
-            from stg.ev_registration
+            from bronze.ev_registration
         """
         )
 
-        int_day = self.spark.sql(
+        silver_day = self.spark.sql(
             """
-            select * from stg.day
+            select * from bronze.day
         """
         )
 
-        int_ev_registration.write.option("path", f"{integration}/ev_registration").mode(
+        silver_ev_registration.write.option("path", f"{silver}/ev_registration").mode(
             "overwrite"
         ).saveAsTable("ev_registration")
 
@@ -370,7 +374,7 @@ class Job:
                    er.congressional_districts,
                    er.legislative_district,
                    er.vehicle_location
-            from int.ev_registration er
+            from silver.ev_registration er
         """
         )
 
@@ -385,7 +389,7 @@ class Job:
                        er.base_msrp,
                        er.vin,
                        er.dol_vehicle_id
-                from int.ev_registration er
+                from silver.ev_registration er
             """
         )
 
