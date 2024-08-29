@@ -1,39 +1,40 @@
-from pyspark.sql import SparkSession
-from pyspark import SparkContext, SparkConf
 import datetime
 import json
 
-from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    IntegerType,
-    DoubleType,
-    LongType,
-    ArrayType,
-    MapType,
-)
+from pyspark import SparkConf, SparkContext
+from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    from_json,
     col,
-    explode,
-    explode_outer,
-    stack,
-    lit,
+    count,
     date_format,
     dayofmonth,
     dayofweek,
     dayofyear,
+    explode,
+    explode_outer,
+    expr,
+    first,
+    from_json,
+    lit,
+    max,
+    min,
     month,
     quarter,
-    weekofyear,
-    year,
     split,
-    expr,
+    stack,
+    weekofyear,
     when,
-    first,
-    min,
-    max
+    year,
+)
+from pyspark.sql.types import (
+    ArrayType,
+    DoubleType,
+    IntegerType,
+    LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
 )
 
 
@@ -112,30 +113,21 @@ class Job:
                 expr("date_sub(date_add(date, 1-day(add_months(date, 1))), 1)"),
             )
         )
-       
-        # week of the month
-        stg_day = stg_day.join(
-            stg_day.groupBy("year", "week_of_year").agg(
-            min(col("date")).alias("week_start_date"),
-            max(col("date")).alias("week_end_date"),
-            ),
-            on=["year", "week_of_year"],
-            how="left"
-        )
-
-        assert stg_day.count() == 3654
 
         stg_day.cache()
 
-        stg_week = stg_day.select("date", "date_key", "week_start_date", "week_end_date", "year", "month", "month_name", "quarter", "week_of_month", "week_of_year")
+        assert stg_day.count() == 3654
 
-        # assert stg_week.count() > stg_week.dropDuplicates(stg_week.columns).count()
+        stg_week = stg_day.groupBy("year", "week_of_year").agg(
+            min("date").alias("date"),  # Get the first date of the week
+            first("date_key").alias("date_key"),
+            first("month").alias("month"),
+            first("month_name").alias("month_name"),
+            first("quarter").alias("quarter"),
+            first("week_of_month").alias("week_of_month"),
+        )
 
-        # mask = stg_week.groupBy(stg_week.columns).count().select(col("count") > 1)
-
-        # duplicates = stg_week.join(mask, stg_week.columns, "inner").select(stg_week["*"])
-
-        # duplicates.show()
+        assert stg_week.count() == stg_week.dropDuplicates(stg_week.columns).count()
 
         stg_month = stg_day.where(col("day_of_month").isin(1))
 
@@ -304,8 +296,6 @@ class Job:
                     date,
                     date_key,
                     week_of_year,
-                    week_start_date,
-                    week_end_date,
                     month,
                     month_name,
                     quarter,
@@ -315,7 +305,7 @@ class Job:
         """
         )
 
-        int_week.orderBy("week_of_year", ascending=False).show(10)
+        int_week.show(10)
 
         int_month = self.spark.sql(
             """
